@@ -8,6 +8,7 @@ import ReviewScreen from "./screens/ReviewScreen";
 import MyJobsScreen from "./screens/MyJobsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import ChatScreen from "./screens/ChatScreen";
+import NotificationsScreen from "./screens/NotificationsScreen";
 import BottomNav from "./components/BottomNav";
 
 function AppRouter() {
@@ -24,11 +25,12 @@ function AppRouter() {
       case "jobs": return <MyJobsScreen />;
       case "profile": return <ProfileScreen />;
       case "chat": return <ChatScreen />;
+      case "notifications": return <NotificationsScreen />;
       default: return <LoginScreen />;
     }
   };
 
-  const showNav = ["home","jobs","profile"].includes(screen);
+  const showNav = ["home","jobs","profile","notifications"].includes(screen);
 
   return (
     <div className="app-shell">
