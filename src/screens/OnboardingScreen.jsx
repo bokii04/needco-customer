@@ -26,11 +26,7 @@ export default function OnboardingScreen() {
   const streamRef = useRef(null);
 
   const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const getPhone = () => {
-    const digits = form.phone.replace(/\D/g, "").replace(/^0/, "");
-    return "+63" + digits;
-  };
+  const getPhone = () => "+63" + form.phone.replace(/\D/g, "").replace(/^0/, "");
 
   const detectLocation = () => {
     setLocating(true);
@@ -56,14 +52,12 @@ export default function OnboardingScreen() {
   const handleSendOTP = async () => {
     setLoading(true);
     setError("");
-    const phone = getPhone();
-    console.log("Sending OTP to:", phone);
     try {
-      const { error: e } = await supabase.auth.signInWithOtp({ phone });
+      const { error: e } = await supabase.auth.signInWithOtp({ phone: getPhone() });
       if (e) throw e;
       setOtpSent(true);
     } catch (e) {
-      setError(e.message || "Failed to send OTP. Check your number.");
+      setError(e.message || "Failed to send OTP.");
     }
     setLoading(false);
   };
@@ -71,20 +65,15 @@ export default function OnboardingScreen() {
   const handleVerifyOTP = async () => {
     setLoading(true);
     setError("");
-    const phone = getPhone();
-    console.log("Verifying OTP for:", phone, "token:", otp);
     try {
-      const { data, error: e } = await supabase.auth.verifyOtp({
-        phone,
+      const { error: e } = await supabase.auth.verifyOtp({
+        phone: getPhone(),
         token: otp.trim(),
         type: "sms"
       });
-      console.log("Verify result:", data, e);
       if (e) throw e;
       setOtpVerified(true);
-      setError("");
     } catch (e) {
-      console.error("OTP error:", e);
       setError("Invalid OTP. Please try again.");
     }
     setLoading(false);
@@ -124,29 +113,37 @@ export default function OnboardingScreen() {
   const handleSubmit = async () => {
     setLoading(true);
     setError("");
-    try {
-      let selfieUrl = null;
 
-      if (form.selfieFile) {
-        const fileName = `${user.id}_selfie_${Date.now()}.jpg`;
+    // Step 1 — try selfie upload but never block on failure
+    let selfieUrl = null;
+    if (form.selfieFile) {
+      try {
+        const fileName = `${user.id}_${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
           .from("selfies")
           .upload(fileName, form.selfieFile, { upsert: true });
         if (!uploadError) {
-          const { data: urlData } = supabase.storage.from("selfies").getPublicUrl(fileName);
-          selfieUrl = urlData.publicUrl;
+          const { data: urlData } = supabase.storage
+            .from("selfies")
+            .getPublicUrl(fileName);
+          selfieUrl = urlData?.publicUrl || null;
         }
+      } catch (e) {
+        console.warn("Selfie upload failed, continuing:", e);
       }
+    }
 
+    // Step 2 — save profile regardless of selfie result
+    try {
       const { error: updateError } = await supabase.from("users").upsert({
         id: user.id,
-        name: `${form.firstName} ${form.lastName}`,
+        name: `${form.firstName} ${form.lastName}`.trim(),
         first_name: form.firstName,
         last_name: form.lastName,
-        phone: getPhone(),
-        address: form.address,
-        lat: form.lat,
-        lng: form.lng,
+        phone: form.phone ? getPhone() : null,
+        address: form.address || null,
+        lat: form.lat || null,
+        lng: form.lng || null,
         selfie_url: selfieUrl,
         role: "customer",
         is_onboarded: true,
@@ -157,16 +154,17 @@ export default function OnboardingScreen() {
 
       setUser(prev => ({
         ...prev,
-        name: `${form.firstName} ${form.lastName}`,
-        phone: getPhone(),
+        name: `${form.firstName} ${form.lastName}`.trim(),
+        phone: form.phone ? getPhone() : prev.phone,
         is_onboarded: true,
       }));
 
       navigate("home");
     } catch (e) {
+      console.error("Profile save error:", e);
       setError("Failed to save profile. Please try again.");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const totalSteps = 4;
@@ -180,9 +178,7 @@ export default function OnboardingScreen() {
       </div>
 
       <div style={{ padding: "20px 24px 0", display: "flex", alignItems: "center", gap: 12 }}>
-        {step > 1 && (
-          <button className="back-btn" onClick={() => setStep(s => s - 1)}>←</button>
-        )}
+        {step > 1 && <button className="back-btn" onClick={() => setStep(s => s - 1)}>←</button>}
         <div>
           <p style={{ fontSize: 11, fontWeight: 600, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>Step {step} of {totalSteps}</p>
           <h3 style={{ marginTop: 2 }}>
@@ -224,7 +220,6 @@ export default function OnboardingScreen() {
                 📱 We use your phone number to send you job updates and connect you with workers.
               </p>
             </div>
-
             <div className="fade-up input-wrap">
               <label className="input-label">Phone number *</label>
               <div style={{ display: "flex", gap: 8 }}>
@@ -241,9 +236,7 @@ export default function OnboardingScreen() {
                 />
               </div>
               {form.phone.length >= 10 && (
-                <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 4 }}>
-                  Will be sent to: {getPhone()}
-                </p>
+                <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 4 }}>Will send to: {getPhone()}</p>
               )}
             </div>
 
@@ -284,9 +277,7 @@ export default function OnboardingScreen() {
                   <span style={{ fontSize: 18 }}>✅</span>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "var(--success)" }}>Phone verified!</span>
                 </div>
-                <button className="btn btn-gold fade-up-1" onClick={() => setStep(3)}>
-                  Continue →
-                </button>
+                <button className="btn btn-gold fade-up-1" onClick={() => setStep(3)}>Continue →</button>
               </>
             )}
 
@@ -309,13 +300,7 @@ export default function OnboardingScreen() {
             </div>
             <div className="fade-up input-wrap">
               <label className="input-label">Your address *</label>
-              <input
-                className="input-field"
-                placeholder="Street, Barangay, City"
-                value={form.address}
-                onChange={e => update("address", e.target.value)}
-                style={{ marginBottom: 8 }}
-              />
+              <input className="input-field" placeholder="Street, Barangay, City" value={form.address} onChange={e => update("address", e.target.value)} style={{ marginBottom: 8 }} />
               <button onClick={detectLocation} disabled={locating} style={{
                 display: "flex", alignItems: "center", gap: 8,
                 background: "none", border: "1.5px solid var(--gold-mid)",
