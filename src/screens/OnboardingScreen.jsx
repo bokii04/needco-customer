@@ -27,6 +27,11 @@ export default function OnboardingScreen() {
 
   const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  const getPhone = () => {
+    const digits = form.phone.replace(/\D/g, "").replace(/^0/, "");
+    return "+63" + digits;
+  };
+
   const detectLocation = () => {
     setLocating(true);
     navigator.geolocation?.getCurrentPosition(
@@ -51,7 +56,8 @@ export default function OnboardingScreen() {
   const handleSendOTP = async () => {
     setLoading(true);
     setError("");
-    const phone = "+63" + form.phone.replace(/^0/, "");
+    const phone = getPhone();
+    console.log("Sending OTP to:", phone);
     try {
       const { error: e } = await supabase.auth.signInWithOtp({ phone });
       if (e) throw e;
@@ -65,12 +71,20 @@ export default function OnboardingScreen() {
   const handleVerifyOTP = async () => {
     setLoading(true);
     setError("");
-    const phone = "+63" + form.phone.replace(/^0/, "");
+    const phone = getPhone();
+    console.log("Verifying OTP for:", phone, "token:", otp);
     try {
-      const { error: e } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
+      const { data, error: e } = await supabase.auth.verifyOtp({
+        phone,
+        token: otp.trim(),
+        type: "sms"
+      });
+      console.log("Verify result:", data, e);
       if (e) throw e;
       setOtpVerified(true);
+      setError("");
     } catch (e) {
+      console.error("OTP error:", e);
       setError("Invalid OTP. Please try again.");
     }
     setLoading(false);
@@ -115,7 +129,7 @@ export default function OnboardingScreen() {
 
       if (form.selfieFile) {
         const fileName = `${user.id}_selfie_${Date.now()}.jpg`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("selfies")
           .upload(fileName, form.selfieFile, { upsert: true });
         if (!uploadError) {
@@ -129,7 +143,7 @@ export default function OnboardingScreen() {
         name: `${form.firstName} ${form.lastName}`,
         first_name: form.firstName,
         last_name: form.lastName,
-        phone: "+63" + form.phone.replace(/^0/, ""),
+        phone: getPhone(),
         address: form.address,
         lat: form.lat,
         lng: form.lng,
@@ -144,7 +158,7 @@ export default function OnboardingScreen() {
       setUser(prev => ({
         ...prev,
         name: `${form.firstName} ${form.lastName}`,
-        phone: "+63" + form.phone.replace(/^0/, ""),
+        phone: getPhone(),
         is_onboarded: true,
       }));
 
@@ -161,12 +175,10 @@ export default function OnboardingScreen() {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: "100vh" }}>
 
-      {/* Progress bar */}
       <div style={{ height: 3, background: "var(--gray-200)" }}>
         <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, var(--gold), var(--gold-mid))", transition: "width 0.4s ease" }} />
       </div>
 
-      {/* Header */}
       <div style={{ padding: "20px 24px 0", display: "flex", alignItems: "center", gap: 12 }}>
         {step > 1 && (
           <button className="back-btn" onClick={() => setStep(s => s - 1)}>←</button>
@@ -184,7 +196,6 @@ export default function OnboardingScreen() {
 
       <div className="scroll-body" style={{ paddingTop: 24 }}>
 
-        {/* STEP 1 — Name */}
         {step === 1 && (
           <>
             <div style={{ marginBottom: 28, padding: "16px", background: "var(--gold-light)", borderRadius: "var(--radius-lg)", border: "1px solid var(--gold-mid)" }}>
@@ -192,24 +203,20 @@ export default function OnboardingScreen() {
                 👋 Welcome to Need.co! Let's set up your profile so workers can know who they're helping.
               </p>
             </div>
-
             <div className="fade-up input-wrap">
               <label className="input-label">First name *</label>
               <input className="input-field" placeholder="e.g. Juan" value={form.firstName} onChange={e => update("firstName", e.target.value)} />
             </div>
-
             <div className="fade-up-1 input-wrap" style={{ marginBottom: 28 }}>
               <label className="input-label">Last name *</label>
               <input className="input-field" placeholder="e.g. Dela Cruz" value={form.lastName} onChange={e => update("lastName", e.target.value)} />
             </div>
-
             <button className="btn btn-gold fade-up-2" disabled={!form.firstName || !form.lastName} onClick={() => setStep(2)}>
               Continue →
             </button>
           </>
         )}
 
-        {/* STEP 2 — Phone + OTP */}
         {step === 2 && (
           <>
             <div style={{ marginBottom: 24, padding: "14px", background: "var(--gold-light)", borderRadius: "var(--radius-lg)", border: "1px solid var(--gold-mid)" }}>
@@ -233,6 +240,11 @@ export default function OnboardingScreen() {
                   disabled={otpVerified}
                 />
               </div>
+              {form.phone.length >= 10 && (
+                <p style={{ fontSize: 11, color: "var(--gray-400)", marginTop: 4 }}>
+                  Will be sent to: {getPhone()}
+                </p>
+              )}
             </div>
 
             {!otpVerified && !otpSent && (
@@ -254,7 +266,10 @@ export default function OnboardingScreen() {
                     style={{ letterSpacing: "0.3em", fontSize: 20, textAlign: "center" }}
                   />
                   <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 6 }}>
-                    Sent to +63{form.phone} · <button onClick={() => { setOtpSent(false); setOtp(""); }} style={{ background: "none", border: "none", color: "var(--gold-dark)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Change number</button>
+                    Sent to {getPhone()} ·{" "}
+                    <button onClick={() => { setOtpSent(false); setOtp(""); setError(""); }} style={{ background: "none", border: "none", color: "var(--gold-dark)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                      Change number
+                    </button>
                   </p>
                 </div>
                 <button className="btn btn-gold fade-up-1" disabled={otp.length < 6 || loading} onClick={handleVerifyOTP}>
@@ -275,7 +290,6 @@ export default function OnboardingScreen() {
               </>
             )}
 
-            {/* Skip for testing */}
             {!otpVerified && (
               <button className="btn btn-outline fade-up-2" style={{ marginTop: 10 }} onClick={() => setStep(3)}>
                 Skip for now (testing only)
@@ -286,7 +300,6 @@ export default function OnboardingScreen() {
           </>
         )}
 
-        {/* STEP 3 — Location */}
         {step === 3 && (
           <>
             <div style={{ marginBottom: 24, padding: "14px", background: "var(--gold-light)", borderRadius: "var(--radius-lg)", border: "1px solid var(--gold-mid)" }}>
@@ -294,7 +307,6 @@ export default function OnboardingScreen() {
                 📍 We use your location to match you with nearby workers in Iloilo City & Pavia.
               </p>
             </div>
-
             <div className="fade-up input-wrap">
               <label className="input-label">Your address *</label>
               <input
@@ -314,20 +326,17 @@ export default function OnboardingScreen() {
                 {locating ? "📡 Detecting..." : "📍 Use my current location"}
               </button>
             </div>
-
             {form.lat && form.lng && (
               <div className="fade-up" style={{ background: "var(--success-light)", border: "1px solid var(--success)", borderRadius: "var(--radius-md)", padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "var(--success)" }}>
                 ✅ GPS detected: {form.lat.toFixed(4)}, {form.lng.toFixed(4)}
               </div>
             )}
-
             <button className="btn btn-gold fade-up-1" disabled={!form.address} onClick={() => setStep(4)} style={{ marginTop: 8 }}>
               Continue →
             </button>
           </>
         )}
 
-        {/* STEP 4 — Selfie */}
         {step === 4 && (
           <>
             <div style={{ marginBottom: 24, padding: "14px", background: "var(--gold-light)", borderRadius: "var(--radius-lg)", border: "1px solid var(--gold-mid)" }}>
@@ -336,7 +345,6 @@ export default function OnboardingScreen() {
               </p>
             </div>
 
-            {/* Camera */}
             {cameraOpen && (
               <div className="fade-up" style={{ marginBottom: 20 }}>
                 <video ref={videoRef} autoPlay playsInline style={{ width: "100%", borderRadius: "var(--radius-lg)", background: "#000" }} />
@@ -347,7 +355,6 @@ export default function OnboardingScreen() {
               </div>
             )}
 
-            {/* Preview */}
             {form.selfiePreview && !cameraOpen && (
               <div className="fade-up" style={{ marginBottom: 20, textAlign: "center" }}>
                 <img src={form.selfiePreview} alt="Selfie" style={{ width: 140, height: 140, borderRadius: "50%", objectFit: "cover", border: "3px solid var(--gold)", boxShadow: "var(--shadow-gold)" }} />
@@ -393,7 +400,6 @@ export default function OnboardingScreen() {
             <button className="btn btn-gold fade-up-1" disabled={loading} onClick={handleSubmit}>
               {loading ? "Saving profile..." : "Complete setup 🚀"}
             </button>
-
             <button className="btn btn-outline fade-up-2" style={{ marginTop: 10 }} onClick={handleSubmit} disabled={loading}>
               Skip selfie (testing only)
             </button>
