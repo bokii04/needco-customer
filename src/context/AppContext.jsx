@@ -26,40 +26,68 @@ export function AppProvider({ children }) {
 
   const saveAndSetUser = async (u) => {
     try {
-      await supabase.from("users").upsert({
+      // Check if user already exists and is onboarded
+      const { data: existing } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", u.id)
+        .single();
+
+      if (!existing) {
+        await supabase.from("users").upsert({
+          id: u.id,
+          name: u.user_metadata?.full_name || u.email,
+          phone: u.phone || null,
+          role: "customer",
+          is_onboarded: false,
+        }, { onConflict: "id" });
+      }
+
+      const isOnboarded = existing?.is_onboarded || false;
+
+      setUser({
+        id: u.id,
+        name: existing?.name || u.user_metadata?.full_name || u.email,
+        email: u.email,
+        avatar: u.user_metadata?.avatar_url || null,
+        phone: existing?.phone || null,
+        address: existing?.address || null,
+        is_onboarded: isOnboarded,
+        role: "customer",
+        initials: (existing?.name || u.user_metadata?.full_name || u.email || "U")
+          .split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase()
+      });
+
+      // Route based on onboarding status
+      setScreen(isOnboarded ? "home" : "onboarding");
+
+    } catch(e) {
+      setUser({
         id: u.id,
         name: u.user_metadata?.full_name || u.email,
-        phone: u.phone || null,
-        role: "customer"
-      }, { onConflict: "id" });
-    } catch(e) {}
-    setUser({
-      id: u.id,
-      name: u.user_metadata?.full_name || u.email,
-      email: u.email,
-      avatar: u.user_metadata?.avatar_url || null,
-      role: "customer",
-      initials: (u.user_metadata?.full_name || u.email || "U")
-        .split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase()
-    });
-    setScreen("home");
+        email: u.email,
+        avatar: u.user_metadata?.avatar_url || null,
+        is_onboarded: false,
+        role: "customer",
+        initials: (u.user_metadata?.full_name || u.email || "U")
+          .split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase()
+      });
+      setScreen("onboarding");
+    }
+
     setLoading(false);
   };
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       setLoading(false);
-      if (!user) setScreen("login");
+      setScreen("login");
     }, 3000);
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       clearTimeout(timeout);
-      if (session?.user) {
-        await saveAndSetUser(session.user);
-      } else {
-        setLoading(false);
-        setScreen("login");
-      }
+      if (session?.user) await saveAndSetUser(session.user);
+      else { setLoading(false); setScreen("login"); }
     }).catch(() => {
       clearTimeout(timeout);
       setLoading(false);
@@ -67,18 +95,15 @@ export function AppProvider({ children }) {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await saveAndSetUser(session.user);
-      } else {
-        setUser(null);
-        setScreen("login");
-      }
+      if (session?.user) await saveAndSetUser(session.user);
+      else { setUser(null); setScreen("login"); }
     });
 
     return () => { clearTimeout(timeout); subscription.unsubscribe(); };
   }, []);
 
   const navigate = (s) => setScreen(s);
+
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -95,7 +120,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ screen, navigate, user, logout, selectedService, setSelectedService, jobForm, setJobForm, selectedWorker, setSelectedWorker, activeJob, setActiveJob, jobs, setJobs }}>
+    <AppContext.Provider value={{ screen, navigate, user, setUser, logout, selectedService, setSelectedService, jobForm, setJobForm, selectedWorker, setSelectedWorker, activeJob, setActiveJob, jobs, setJobs }}>
       {children}
     </AppContext.Provider>
   );

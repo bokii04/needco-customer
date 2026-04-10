@@ -8,6 +8,7 @@ import ReviewScreen from "./screens/ReviewScreen";
 import MyJobsScreen from "./screens/MyJobsScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import ChatScreen from "./screens/ChatScreen";
+import OnboardingScreen from "./screens/OnboardingScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 import BottomNav from "./components/BottomNav";
 
@@ -25,6 +26,7 @@ function AppRouter() {
       case "jobs": return <MyJobsScreen />;
       case "profile": return <ProfileScreen />;
       case "chat": return <ChatScreen />;
+      case "onboarding": return <OnboardingScreen />;
       case "notifications": return <NotificationsScreen />;
       default: return <LoginScreen />;
     }
