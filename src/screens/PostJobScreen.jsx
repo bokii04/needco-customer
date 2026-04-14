@@ -18,7 +18,7 @@ export default function PostJobScreen() {
     try {
       let lat = 10.7202, lng = 122.5621;
       try {
-        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000 }));
         lat = pos.coords.latitude;
         lng = pos.coords.longitude;
       } catch (e) {}
@@ -39,43 +39,48 @@ export default function PostJobScreen() {
           customer_phone: user?.phone || null,
           customer_avatar: user?.avatar || null,
         })
-        .select()
-        
+        .select();
+
+      if (jobError) {
+        console.error("[Customer] Job insert error:", jobError);
+        throw jobError;
+      }
 
       const job = Array.isArray(jobData) ? jobData[0] : jobData;
-      if (jobError || !job) throw jobError || new Error("Failed to create job");
+      if (!job) throw new Error("No job returned");
       console.log("[Customer] Job posted:", job.id);
 
-      const { data: onlineWorkers } = await supabase
-        .from("workers")
-        .select("user_id, full_name, skills")
-        .eq("is_available", true)
-        .eq("status", "approved");
+      try {
+        const { data: onlineWorkers } = await supabase
+          .from("workers")
+          .select("user_id, full_name, skills")
+          .eq("is_available", true)
+          .eq("status", "approved");
 
-      if (onlineWorkers?.length > 0) {
-        const matching = onlineWorkers.filter(w => !w.skills || w.skills.length === 0 || w.skills.includes(selectedService?.name));
-        if (matching.length > 0) {
-          await supabase.from("notifications").insert(
-            matching.map(w => ({
+        if (onlineWorkers && onlineWorkers.length > 0) {
+          supabase.from("notifications").insert(
+            onlineWorkers.map(w => ({
               user_id: w.user_id,
-              title: "🔔 New " + selectedService?.name + " job!",
-              body: (user?.name || "A customer") + " needs " + selectedService?.name + " — ₱" + (form.budget || selectedService?.base) + ". " + (form.address || "Iloilo City"),
+              title: "New " + selectedService?.name + " job!",
+              body: (user?.name || "A customer") + " needs " + selectedService?.name + " — P" + (form.budget || selectedService?.base),
               type: "job_request",
               data: { job_id: job.id },
             }))
-          );
+          ).then(() => console.log("[Customer] Workers notified"))
+           .catch(e => console.warn("[Customer] Notify failed:", e));
         }
-      }
+      } catch (e) {}
 
       setJobForm({ ...form, jobId: job.id });
       setActiveJob(job);
       setPosted(true);
       setTimeout(() => navigate("waiting"), 2000);
+
     } catch (e) {
-      console.error(e);
+      console.error("[Customer] Post failed:", e);
       setError("Failed to post job. Please try again.");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (posted) {
@@ -103,16 +108,16 @@ export default function PostJobScreen() {
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: "var(--black)" }}>{selectedService?.name}</div>
             <div style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 2 }}>{selectedService?.desc}</div>
-            <div style={{ fontSize: 11, color: "var(--gold-dark)", fontWeight: 600, marginTop: 4 }}>⏱ ETA {selectedService?.eta}</div>
+            <div style={{ fontSize: 11, color: "var(--gold-dark)", fontWeight: 600, marginTop: 4 }}>ETA {selectedService?.eta}</div>
           </div>
-          <span className="badge badge-gold" style={{ marginLeft: "auto" }}>₱{selectedService?.base}+</span>
+          <span className="badge badge-gold" style={{ marginLeft: "auto" }}>P{selectedService?.base}+</span>
         </div>
 
         <div className="fade-up-1 input-wrap">
           <label className="input-label">Describe the job *</label>
           <textarea className="input-field" rows={4} placeholder="Be specific — what needs to be done?" value={form.desc} onChange={e => update("desc", e.target.value)} />
           <div style={{ fontSize: 11, color: form.desc.length < 10 ? "var(--warning)" : "var(--success)", marginTop: 4 }}>
-            {form.desc.length < 10 ? (10 - form.desc.length) + " more characters needed" : "✓ Good description"}
+            {form.desc.length < 10 ? (10 - form.desc.length) + " more characters needed" : "Good description"}
           </div>
         </div>
 
@@ -131,8 +136,8 @@ export default function PostJobScreen() {
         </div>
 
         <div className="fade-up-4 input-wrap" style={{ marginBottom: 28 }}>
-          <label className="input-label">Your budget (₱)</label>
-          <input className="input-field" type="number" placeholder={"Suggested: ₱" + selectedService?.base} value={form.budget} onChange={e => update("budget", e.target.value)} />
+          <label className="input-label">Your budget (P)</label>
+          <input className="input-field" type="number" placeholder={"Suggested: P" + selectedService?.base} value={form.budget} onChange={e => update("budget", e.target.value)} />
         </div>
 
         {error && (
@@ -140,7 +145,7 @@ export default function PostJobScreen() {
         )}
 
         <button className="btn btn-gold fade-up-5" onClick={handlePost} disabled={form.desc.length < 10 || !form.address || loading}>
-          {loading ? "Posting job..." : "Post job & find workers →"}
+          {loading ? "Posting job..." : "Post job and find workers"}
         </button>
       </div>
     </div>
