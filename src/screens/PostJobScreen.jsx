@@ -42,7 +42,8 @@ export default function PostJobScreen() {
         .select()
         
 
-      if (jobError) throw jobError;
+      const job = Array.isArray(jobData) ? jobData[0] : jobData;
+      if (jobError || !job) throw jobError || new Error("Failed to create job");
       console.log("[Customer] Job posted:", job.id);
 
       const { data: onlineWorkers } = await supabase
