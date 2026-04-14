@@ -15,14 +15,11 @@ export default function PostJobScreen() {
     setLoading(true);
     setError("");
 
-    try {
-      let lat = 10.7202, lng = 122.5621;
-      try {
-        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000 }));
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-      } catch (e) {}
+    // Default Iloilo coords — skip geolocation entirely to avoid hanging
+    const lat = 10.7202;
+    const lng = 122.5621;
 
+    try {
       const { data: jobData, error: jobError } = await supabase
         .from("jobs")
         .insert({
@@ -41,35 +38,29 @@ export default function PostJobScreen() {
         })
         .select();
 
-      if (jobError) {
-        console.error("[Customer] Job insert error:", jobError);
-        throw jobError;
-      }
+      if (jobError) throw jobError;
 
       const job = Array.isArray(jobData) ? jobData[0] : jobData;
       if (!job) throw new Error("No job returned");
       console.log("[Customer] Job posted:", job.id);
 
-      try {
-        const { data: onlineWorkers } = await supabase
-          .from("workers")
-          .select("user_id, full_name, skills")
-          .eq("is_available", true)
-          .eq("status", "approved");
-
-        if (onlineWorkers && onlineWorkers.length > 0) {
-          supabase.from("notifications").insert(
-            onlineWorkers.map(w => ({
-              user_id: w.user_id,
-              title: "New " + selectedService?.name + " job!",
-              body: (user?.name || "A customer") + " needs " + selectedService?.name + " — P" + (form.budget || selectedService?.base),
-              type: "job_request",
-              data: { job_id: job.id },
-            }))
-          ).then(() => console.log("[Customer] Workers notified"))
-           .catch(e => console.warn("[Customer] Notify failed:", e));
-        }
-      } catch (e) {}
+      // Notify workers — fire and forget
+      supabase.from("workers")
+        .select("user_id")
+        .eq("is_available", true)
+        .eq("status", "approved")
+        .then(({ data: workers }) => {
+          if (workers && workers.length > 0) {
+            supabase.from("notifications").insert(
+              workers.map(w => ({
+                user_id: w.user_id,
+                title: "New " + selectedService?.name + " job!",
+                body: (user?.name || "Customer") + " needs help — P" + (form.budget || selectedService?.base),
+                type: "job_request",
+              }))
+            );
+          }
+        });
 
       setJobForm({ ...form, jobId: job.id });
       setActiveJob(job);
@@ -89,9 +80,6 @@ export default function PostJobScreen() {
         <div style={{ width: 88, height: 88, background: "linear-gradient(135deg, var(--gold), var(--gold-mid))", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 24, boxShadow: "var(--shadow-gold)", animation: "fadeUp 0.4s ease both" }}>✅</div>
         <h2 style={{ marginBottom: 8, textAlign: "center" }}>Job posted!</h2>
         <p style={{ color: "var(--gray-400)", textAlign: "center", fontSize: 14 }}>Searching for nearby workers...</p>
-        <div style={{ display: "flex", gap: 6, marginTop: 20 }}>
-          {[0,1,2].map(i => (<div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", animation: "pulse 1.2s " + (i*0.2) + "s infinite" }} />))}
-        </div>
       </div>
     );
   }
@@ -108,14 +96,13 @@ export default function PostJobScreen() {
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: "var(--black)" }}>{selectedService?.name}</div>
             <div style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 2 }}>{selectedService?.desc}</div>
-            <div style={{ fontSize: 11, color: "var(--gold-dark)", fontWeight: 600, marginTop: 4 }}>ETA {selectedService?.eta}</div>
           </div>
           <span className="badge badge-gold" style={{ marginLeft: "auto" }}>P{selectedService?.base}+</span>
         </div>
 
         <div className="fade-up-1 input-wrap">
           <label className="input-label">Describe the job *</label>
-          <textarea className="input-field" rows={4} placeholder="Be specific — what needs to be done?" value={form.desc} onChange={e => update("desc", e.target.value)} />
+          <textarea className="input-field" rows={4} placeholder="What needs to be done?" value={form.desc} onChange={e => update("desc", e.target.value)} />
           <div style={{ fontSize: 11, color: form.desc.length < 10 ? "var(--warning)" : "var(--success)", marginTop: 4 }}>
             {form.desc.length < 10 ? (10 - form.desc.length) + " more characters needed" : "Good description"}
           </div>
@@ -130,7 +117,7 @@ export default function PostJobScreen() {
           <label className="input-label">When do you need it?</label>
           <div style={{ display: "flex", gap: 8 }}>
             {["ASAP","Today PM","Tomorrow","Schedule"].map(opt => (
-              <button key={opt} onClick={() => update("when", opt)} style={{ flex: 1, padding: "10px 4px", border: form.when === opt ? "1.5px solid var(--gold)" : "1.5px solid var(--gray-200)", borderRadius: "var(--radius-sm)", background: form.when === opt ? "var(--gold-light)" : "none", fontSize: 11, fontWeight: 600, cursor: "pointer", color: form.when === opt ? "var(--gold-dark)" : "var(--gray-400)", transition: "all 0.15s" }}>{opt}</button>
+              <button key={opt} onClick={() => update("when", opt)} style={{ flex: 1, padding: "10px 4px", border: form.when === opt ? "1.5px solid var(--gold)" : "1.5px solid var(--gray-200)", borderRadius: "var(--radius-sm)", background: form.when === opt ? "var(--gold-light)" : "none", fontSize: 11, fontWeight: 600, cursor: "pointer", color: form.when === opt ? "var(--gold-dark)" : "var(--gray-400)" }}>{opt}</button>
             ))}
           </div>
         </div>
