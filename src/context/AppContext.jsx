@@ -31,7 +31,7 @@ export function AppProvider({ children }) {
         .from("users")
         .select("*")
         .eq("id", u.id)
-        .single();
+        .maybeSingle();
 
       if (!existing) {
         await supabase.from("users").upsert({

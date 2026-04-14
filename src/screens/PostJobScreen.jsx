@@ -23,7 +23,7 @@ export default function PostJobScreen() {
         lng = pos.coords.longitude;
       } catch (e) {}
 
-      const { data: job, error: jobError } = await supabase
+      const { data: jobData, error: jobError } = await supabase
         .from("jobs")
         .insert({
           customer_id: user.id,
@@ -40,7 +40,7 @@ export default function PostJobScreen() {
           customer_avatar: user?.avatar || null,
         })
         .select()
-        .single();
+        
 
       if (jobError) throw jobError;
       console.log("[Customer] Job posted:", job.id);
