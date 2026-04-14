@@ -20,6 +20,7 @@ export default function PostJobScreen() {
     const lng = 122.5621;
 
     try {
+      console.log("[Customer] Posting with user.id:", user.id, "service:", selectedService?.name);
       const { data: jobData, error: jobError } = await supabase
         .from("jobs")
         .insert({
